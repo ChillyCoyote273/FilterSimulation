@@ -27,11 +27,12 @@ def runge_kutta(power: float, pos: float, vel: float, dt: float, k_v: float, k_a
 
     return next_pos, next_vel
 
-
+model_var = 1.5
 def generate_data(length: int = 600, sample_period: float = 0.05,
-                  k_v: float = 0.001, k_a: float = 0.00001,
-                  q: np.ndarray = np.array([[0.025, 0.0125], [0.0125, 0.025]]), r: float = 0.01,
+                  k_v: float = 0.001, k_a: float = 0.00001, k_g: float = 0.1,
+                  q: np.ndarray = np.array([[1.5625e-6, 6.25e-5], [6.25e-5, 2.5e-3]]), r: float = 0.01,
                   seed: int = np.random.randint(1e9)) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    q *= model_var
     np.random.seed(seed)
 
     pos = 0
@@ -52,11 +53,10 @@ def generate_data(length: int = 600, sample_period: float = 0.05,
             powers[i] = power * (1 - alpha) + powers[i - 1] * alpha
         power += np.random.normal(-power * sample_period / 3, sample_period * 3)
     powers = np.clip(powers, -1, 1)
-    # powers = np.ones(length)
 
-    for i, power in tqdm(enumerate(powers)):
+    for i in tqdm(range(len(powers))):
         for _ in range(1000):
-            acceleration = power / k_a - vel * k_v / k_a
+            acceleration = (powers[i] - k_g) / k_a - vel * k_v / k_a
             vel += acceleration * sample_period / 2000
             pos += vel * sample_period / 1000
             vel += acceleration * sample_period / 2000
