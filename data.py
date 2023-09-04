@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from kalman_filter import KalmanFilter
 from scipy.optimize import curve_fit
 from tqdm import tqdm
+import pandas as pd
 
 
 TIMES = [0, 1/3, 2/3, 1]
@@ -40,9 +41,11 @@ def generate_data(length: int = 600, sample_period: float = 0.05,
     
     powers = np.zeros(length)
     positions = np.zeros(length)
+    real_positions = np.zeros(length)
     velocities = np.zeros(length)
 
     times = np.array([sample_period * i for i in range(length)])
+    times += np.random.normal(0, sample_period / 5, len(times))
 
     power = 0
     for i in range(length):
@@ -54,17 +57,53 @@ def generate_data(length: int = 600, sample_period: float = 0.05,
         power += np.random.normal(-power * sample_period / 3, sample_period * 3)
     powers = np.clip(powers, -1, 1)
 
-    for i in tqdm(range(len(powers))):
+    for i in tqdm(range(len(powers) - 1)):
+        period = times[i + 1] - times[i]
         for _ in range(1000):
             acceleration = (powers[i] - k_g) / k_a - vel * k_v / k_a
-            vel += acceleration * sample_period / 2000
-            pos += vel * sample_period / 1000
-            vel += acceleration * sample_period / 2000
+            vel += acceleration * period / 2000
+            pos += vel * period / 1000
+            vel += acceleration * period / 2000
         err = np.random.multivariate_normal(np.zeros(2), q)
         pos += err[0]
         vel += err[1]
 
-        positions[i] = pos + np.random.normal(0, np.abs(vel) * r)
-        velocities[i] = vel
+        positions[i + 1] = pos + np.random.normal(0, np.abs(vel) * r)
+        real_positions[i + 1] = pos
+        velocities[i + 1] = vel
     
-    return times, powers, positions, velocities
+    return times, powers, positions, velocities, real_positions
+
+
+def low_pass(data, alpha):
+    data = data.copy()
+    for i in range(1, len(data)):
+        data[i] *= alpha
+        data[i] += data[i - 1] * (1 - alpha)
+    return data
+
+
+def main():
+    times, powers, positions, _, r_p = generate_data(length=200, k_g=0, r=0.25, seed=2688325153)
+    low5 = low_pass(positions, 0.5)
+    low3 = low_pass(positions, 0.3)
+    low2 = low_pass(positions, 0.2)
+    low12 = low_pass(positions, 0.12)
+    plt.plot(times, positions, label='raw measurement', color='blue')
+    plt.plot(times, low5, label='alpha = 0.5', color='deeppink')
+    plt.plot(times, low3, label='alpha = 0.3', color='red')
+    plt.plot(times, low2, label='alpha = 0.2', color='orange')
+    plt.plot(times, low12, label='alpha = 0.12', color='gold')
+    plt.plot(times, r_p, label='true value', color='black')
+    plt.legend()
+    plt.show()
+    # data = pd.DataFrame({'t': times, 'y1': positions, 'u1': powers})
+    # print(data)
+    # data.to_csv('timetable.csv')
+    # np.savetxt('times.txt', times, fmt='%.9f', newline=',')
+    # np.savetxt('powers.txt', powers, fmt='%.9f', newline=',')
+    # np.savetxt('positions.txt', positions, fmt='%.9f', newline=',')
+
+
+if __name__ == "__main__":
+    main()
